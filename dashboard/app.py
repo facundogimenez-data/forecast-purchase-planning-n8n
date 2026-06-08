@@ -47,13 +47,13 @@ def load_planning_data() -> pd.DataFrame:
     query = """
         SELECT
             p.product_id,
-            p.product_name,
+            p.name            AS product_name,
             i.quantity        AS current_stock,
             f.forecast_qty,
             f.forecast_date,
             pp.quantity       AS purchase_qty,
             pp.unit_cost,
-            pp.lead_time_weeks
+            pp.lead_time_days
         FROM forecasts f
         JOIN products p
             ON f.product_id = p.product_id
@@ -113,7 +113,7 @@ def main():
             "forecast_qty": "Forecast semanal",
             "purchase_qty": "Cantidad a comprar",
             "unit_cost": "Costo unitario",
-            "lead_time_weeks": "Lead time (semanas)",
+            "lead_time_days": "Lead time (días)",
         }
     )[
         [
@@ -122,7 +122,7 @@ def main():
             "Forecast semanal",
             "Cantidad a comprar",
             "Costo unitario",
-            "Lead time (semanas)",
+            "Lead time (días)",
         ]
     ]
 
