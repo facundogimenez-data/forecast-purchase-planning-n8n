@@ -1,73 +1,101 @@
 """
-Forecast & Purchase Planning - Core Logic
-==========================================
-Calculates demand forecast using moving averages and generates
-optimal purchase plans considering lead time and current stock.
+Forecast & Purchase Planning - Core Logic (reconstruction)
+==========================================================
+Python reconstruction of the calculation logic that runs in production
+inside the n8n "Forecast Calculation Engine" sub-workflow (Code / JavaScript
+nodes). Reproduced here in Python for portfolio/demo purposes — the
+production pipeline runs natively in n8n, not as a standalone script.
 
-This script runs inside n8n's Python node.
+Logic: short-horizon moving average forecast + purchase plan that covers
+the planning horizon plus the supplier lead time, netted against on-hand
+stock.
 """
 
 import json
-from datetime import datetime, timedelta
+from statistics import mean
 
 
-def calculate_forecast(sales_history, weeks=4):
-    """Calculate demand forecast using simple moving average."""
-    if not sales_history or len(sales_history) < weeks:
-        return 0
-    recent = sales_history[-weeks:]
-    return round(sum(recent) / len(recent), 2)
-
-
-def generate_purchase_plan(
-    forecast, current_stock, lead_time_weeks, planning_horizon=4
-):
+def calculate_forecast(sales_history, forecast_weeks=1):
     """
-    Determine optimal purchase quantity.
+    Forecast next week's demand as the average of the last `forecast_weeks`
+    weekly sales records (sorted chronologically).
+
+    sales_history: list of {"week_start": "YYYY-MM-DD", "qty_sold": float}
+    """
+    if not sales_history:
+        return 0
+
+    sorted_history = sorted(sales_history, key=lambda h: h["week_start"])
+    recent_sales = [h["qty_sold"] for h in sorted_history[-forecast_weeks:]]
+
+    if not recent_sales:
+        return 0
+
+    return round(mean(recent_sales), 2)
+
+
+def generate_purchase_plan(forecast_qty, on_hand, lead_time_days, plan_weeks=2):
+    """
+    Determine the purchase quantity needed to cover demand for the
+    planning horizon plus the supplier lead time, net of current stock.
 
     Parameters:
-        forecast: weekly demand forecast
-        current_stock: current inventory level
-        lead_time_weeks: supplier lead time in weeks
-        planning_horizon: weeks to cover with purchase
+        forecast_qty:    weekly demand forecast
+        on_hand:         current inventory level
+        lead_time_days:  supplier lead time in days
+        plan_weeks:      weeks of demand the purchase should cover
     """
-    demand_during_lead = forecast * lead_time_weeks
-    target_stock = forecast * planning_horizon
-    purchase_qty = max(0, target_stock + demand_during_lead - current_stock)
-    return round(purchase_qty)
+    weeks_to_cover = plan_weeks + (lead_time_days // 7)
+    planned_demand = forecast_qty * weeks_to_cover
+    return max(0, round(planned_demand - on_hand))
 
 
-def prepare_telegram_message(product_name, stock, forecast, purchase_qty, unit_cost, lead_time):
-    """Format purchase plan data for Telegram notification."""
-    if purchase_qty <= 0:
-        return None
-    return (
-        f"📦 *{product_name}*\n"
-        f"  Stock actual: {stock}\n"
-        f"  Forecast semanal: {forecast}\n"
-        f"  Cantidad a comprar: {purchase_qty}\n"
-        f"  Costo unitario: ${unit_cost}\n"
-        f"  Lead time: {lead_time} semanas"
-    )
+def build_purchase_recommendation_context(product):
+    """
+    Assemble the structured context passed to the AI Agent node, which
+    turns the raw numbers into a natural-language purchase recommendation
+    (sent to Telegram and WhatsApp via Evolution API).
+    """
+    return {
+        "name": product["name"],
+        "sku": product["sku"],
+        "on_hand": product["on_hand"],
+        "forecast_qty": product["forecast_qty"],
+        "purchase_plan": product["purchase_plan"],
+        "unit_cost": product["unit_cost"],
+        "lead_time_days": product["lead_time_days"],
+    }
 
 
 # --- Example usage ---
 if __name__ == "__main__":
-    sales = [120, 135, 110, 125, 140, 130, 145, 138]
+    sales_history = [
+        {"week_start": "2026-05-11", "qty_sold": 120},
+        {"week_start": "2026-05-18", "qty_sold": 135},
+        {"week_start": "2026-05-25", "qty_sold": 128},
+    ]
 
-    forecast = calculate_forecast(sales, weeks=4)
+    forecast = calculate_forecast(sales_history, forecast_weeks=1)
     print(f"Forecast: {forecast} units/week")
 
-    purchase = generate_purchase_plan(
-        forecast=forecast,
-        current_stock=200,
-        lead_time_weeks=2,
-        planning_horizon=4,
+    purchase_plan = generate_purchase_plan(
+        forecast_qty=forecast,
+        on_hand=180,
+        lead_time_days=10,
+        plan_weeks=2,
     )
-    print(f"Purchase plan: {purchase} units")
+    print(f"Purchase plan: {purchase_plan} units")
 
-    msg = prepare_telegram_message(
-        "Producto A", 200, forecast, purchase, 15.50, 2
+    context = build_purchase_recommendation_context(
+        {
+            "name": "Producto A",
+            "sku": "SKU-001",
+            "on_hand": 180,
+            "forecast_qty": forecast,
+            "purchase_plan": purchase_plan,
+            "unit_cost": 15.50,
+            "lead_time_days": 10,
+        }
     )
-    if msg:
-        print(f"\nTelegram message:\n{msg}")
+    print("\nContexto enviado al AI Agent:")
+    print(json.dumps(context, indent=2, ensure_ascii=False))
