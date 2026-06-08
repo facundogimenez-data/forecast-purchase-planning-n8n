@@ -46,28 +46,19 @@ def get_engine():
 def load_planning_data() -> pd.DataFrame:
     query = """
         SELECT
-            p.product_id,
-            p.name            AS product_name,
-            i.quantity        AS current_stock,
-            f.forecast_qty,
-            f.forecast_date,
-            pp.quantity       AS purchase_qty,
-            pp.unit_cost,
+            pp.product_id,
+            pp.name           AS product_name,
+            pp.on_hand        AS current_stock,
+            pp.forecast_qty,
+            pp.revision_date  AS forecast_date,
+            pp.purchase_qty,
+            p.unit_cost,
             pp.lead_time_days
-        FROM forecasts f
+        FROM purchase_plan pp
         JOIN products p
-            ON f.product_id = p.product_id
-        LEFT JOIN purchase_plan pp
-            ON f.product_id = pp.product_id
-            AND f.forecast_date = pp.plan_date
-        LEFT JOIN inventory_snapshots i
-            ON f.product_id = i.product_id
-            AND i.snapshot_date = (
-                SELECT MAX(snapshot_date) FROM inventory_snapshots
-                WHERE product_id = i.product_id
-            )
-        WHERE f.forecast_date = (SELECT MAX(forecast_date) FROM forecasts)
-        ORDER BY pp.quantity DESC;
+            ON p.product_id = pp.product_id
+        WHERE pp.revision_date = (SELECT MAX(revision_date) FROM purchase_plan)
+        ORDER BY pp.purchase_qty DESC;
     """
     return pd.read_sql(query, get_engine())
 
