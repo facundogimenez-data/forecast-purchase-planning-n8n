@@ -1,0 +1,8 @@
+[theme]
+# Paleta "forecast-purchase-planning" (Coolors)
+# Contrastes verificados WCAG AA: texto/fondo y fondo secundario >= 4.5:1
+primaryColor = "#006D77"
+backgroundColor = "#EDF6F9"
+secondaryBackgroundColor = "#FFDDD2"
+textColor = "#006D77"
+font = "sans serif"

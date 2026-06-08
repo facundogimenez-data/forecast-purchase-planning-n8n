@@ -125,7 +125,7 @@ def main():
     chart_df = chart_df.rename(
         columns={"current_stock": "Stock actual", "forecast_qty": "Forecast semanal"}
     )
-    st.bar_chart(chart_df)
+    st.bar_chart(chart_df, color=["#006D77", "#E29578"])
 
     st.caption(
         f"Última actualización: {df['forecast_date'].max()} · "
